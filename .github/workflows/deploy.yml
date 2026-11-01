@@ -1,0 +1,50 @@
+# Runs when code lands on main: build the APK and send it to testers.
+name: Deploy to Firebase
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: deploy-main
+  cancel-in-progress: true
+
+jobs:
+  build-and-distribute:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Static analysis
+        run: flutter analyze
+
+      - name: Unit tests
+        run: flutter test
+
+      - name: Build APK
+        run: flutter build apk --release --build-number=${{ github.run_number }}
+
+      - name: Upload to Firebase App Distribution
+        uses: wzieba/Firebase-Distribution-Github-Action@v1
+        with:
+          appId: ${{ secrets.FIREBASE_APP_ID }}
+          serviceCredentialsFileContent: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          groups: testers
+          file: build/app/outputs/flutter-apk/app-release.apk
+          releaseNotes: "Build ${{ github.run_number }}: ${{ github.event.head_commit.message }}"
