@@ -12,6 +12,7 @@ import 'session_export.dart';
 import 'settings_screen.dart';
 import 'settings_store.dart';
 import 'wave_painter.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 class MeasureScreen extends StatefulWidget {
   const MeasureScreen({super.key});
@@ -35,6 +36,25 @@ class _MeasureScreenState extends State<MeasureScreen> {
   DateTime? _recordingStart;
   MeasurementSession? _session;
   bool _sharing = false;
+
+  String _appInfo = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAppInfo();
+  }
+
+  Future<void> _loadAppInfo() async {
+    final info = await PackageInfo.fromPlatform();
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _appInfo =
+          'Version ${info.version} (build ${info.buildNumber}) · Developer: Ambi';
+    });
+  }
 
   @override
   void dispose() {
@@ -335,7 +355,15 @@ class _MeasureScreenState extends State<MeasureScreen> {
                 'For demo purposes only, not a medical device.',
                 textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.bodySmall,
-              ),
+              ), 
+              if (_appInfo.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Text(
+                  _appInfo,
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
             ],
           ),
         ),
