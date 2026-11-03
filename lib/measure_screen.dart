@@ -1,9 +1,16 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_email_sender/flutter_email_sender.dart';
+import 'package:path_provider/path_provider.dart';
 
 import 'pulse_analysis.dart';
+import 'session_export.dart';
+import 'settings_screen.dart';
+import 'settings_store.dart';
 import 'wave_painter.dart';
 
 class MeasureScreen extends StatefulWidget {
@@ -25,6 +32,9 @@ class _MeasureScreenState extends State<MeasureScreen> {
   int _secondsLeft = _measureSeconds;
   PulseResult? _result;
   String? _error;
+  DateTime? _recordingStart;
+  MeasurementSession? _session;
+  bool _sharing = false;
 
   @override
   void dispose() {
@@ -37,6 +47,7 @@ class _MeasureScreenState extends State<MeasureScreen> {
     setState(() {
       _result = null;
       _error = null;
+      _session = null;
     });
     try {
       final cameras = await availableCameras();
@@ -59,6 +70,7 @@ class _MeasureScreenState extends State<MeasureScreen> {
 
       _timestampsMs.clear();
       _values.clear();
+      _recordingStart = DateTime.now();
       _stopwatch
         ..reset()
         ..start();
@@ -140,13 +152,81 @@ class _MeasureScreenState extends State<MeasureScreen> {
     _timer?.cancel();
     _stopwatch.stop();
     _measuring = false;
+    final recordingEnd = DateTime.now();
     await _stopCamera();
     if (!mounted) {
       return;
     }
+    final result = calculateBpm(_timestampsMs, _values);
     setState(() {
-      _result = calculateBpm(_timestampsMs, _values);
+      _result = result;
+      _session = MeasurementSession(
+        recordingStart: _recordingStart ?? recordingEnd,
+        recordingEnd: recordingEnd,
+        timestampsMs: List.of(_timestampsMs),
+        values: List.of(_values),
+        result: result,
+      );
     });
+  }
+
+  Future<void> _openSettings() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => const SettingsScreen()),
+    );
+  }
+
+  void _showMessage(String text, {SnackBarAction? action}) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(text), action: action),
+    );
+  }
+
+  Future<void> _shareSession() async {
+    final session = _session;
+    if (session == null) {
+      return;
+    }
+    final emails = await SettingsStore().loadEmails();
+    if (!mounted) {
+      return;
+    }
+    if (emails.isEmpty) {
+      _showMessage(
+        'Add email addresses in Settings first.',
+        action: SnackBarAction(label: 'Settings', onPressed: _openSettings),
+      );
+      return;
+    }
+
+    setState(() => _sharing = true);
+    try {
+      final dir = await getTemporaryDirectory();
+      final file = File('${dir.path}/${sessionFileName(session)}');
+      await file.writeAsString(buildSessionCsv(session, DateTime.now()));
+
+      await FlutterEmailSender.send(
+        Email(
+          subject: 'Pulse Check: ${session.bpmText} BPM '
+              '(${isoWithOffset(session.recordingStart)})',
+          body: sessionEmailBody(session),
+          recipients: emails,
+          attachmentPaths: [file.path],
+        ),
+      );
+    } on PlatformException catch (e) {
+      if (mounted) {
+        _showMessage(
+          e.code == 'not_available'
+              ? 'No email app found on this phone.'
+              : 'Could not open email: ${e.message ?? e.code}',
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _sharing = false);
+      }
+    }
   }
 
   Future<void> _stopCamera() async {
@@ -189,7 +269,16 @@ class _MeasureScreenState extends State<MeasureScreen> {
     final controller = _controller;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Pulse Check')),
+      appBar: AppBar(
+        title: const Text('Pulse Check'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.settings),
+            tooltip: 'Settings',
+            onPressed: _measuring ? null : _openSettings,
+          ),
+        ],
+      ),
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(24),
@@ -233,6 +322,14 @@ class _MeasureScreenState extends State<MeasureScreen> {
                 onPressed: _measuring ? null : _startMeasurement,
                 child: Text(_measuring ? 'Measuring...' : 'Measure'),
               ),
+              if (_session != null && !_measuring) ...[
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  onPressed: _sharing ? null : _shareSession,
+                  icon: const Icon(Icons.email_outlined),
+                  label: const Text('Share results'),
+                ),
+              ],
               const SizedBox(height: 12),
               Text(
                 'For demo purposes only, not a medical device.',
