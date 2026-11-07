@@ -14,6 +14,8 @@ import 'settings_store.dart';
 import 'wave_painter.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
+
 class MeasureScreen extends StatefulWidget {
   const MeasureScreen({super.key});
 
@@ -358,10 +360,14 @@ class _MeasureScreenState extends State<MeasureScreen> {
               ), 
               if (_appInfo.isNotEmpty) ...[
                 const SizedBox(height: 4),
-                Text(
-                  _appInfo,
-                  textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.bodySmall,
+                GestureDetector(
+                  // Hidden test: long-press the version line to send a test crash.
+                  onLongPress: () => FirebaseCrashlytics.instance.crash(),
+                  child: Text(
+                    _appInfo,
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
                 ),
               ],
             ],
