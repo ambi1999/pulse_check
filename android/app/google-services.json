@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1031777299409",
+    "project_id": "pulse-check-97164",
+    "storage_bucket": "pulse-check-97164.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1031777299409:android:d46a73fb6ca737b1414ef0",
+        "android_client_info": {
+          "package_name": "com.ambi.pulse_check"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAR6U5mD1LoW4nxHG-FTQVfKd2Z68UST8M"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
