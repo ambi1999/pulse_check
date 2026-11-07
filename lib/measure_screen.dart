@@ -71,6 +71,7 @@ class _MeasureScreenState extends State<MeasureScreen> {
       _error = null;
       _session = null;
     });
+    FirebaseCrashlytics.instance.log('Measurement started');
     try {
       final cameras = await availableCameras();
       if (cameras.isEmpty) {
@@ -89,7 +90,7 @@ class _MeasureScreenState extends State<MeasureScreen> {
       _controller = controller;
       await controller.initialize(); // asks for camera permission
       await controller.setFlashMode(FlashMode.torch);
-
+      FirebaseCrashlytics.instance.log('Camera and flash on'); 
       _timestampsMs.clear();
       _values.clear();
       _recordingStart = DateTime.now();
@@ -173,14 +174,14 @@ class _MeasureScreenState extends State<MeasureScreen> {
   Future<void> _finishMeasurement() async {
     _timer?.cancel();
     _stopwatch.stop();
-    _measuring = false;
     final recordingEnd = DateTime.now();
-    await _stopCamera();
+    final result = calculateBpm(_timestampsMs, _values);
     if (!mounted) {
       return;
     }
-    final result = calculateBpm(_timestampsMs, _values);
+    // 1. Take the camera preview off the screen first...
     setState(() {
+      _measuring = false;
       _result = result;
       _session = MeasurementSession(
         recordingStart: _recordingStart ?? recordingEnd,
@@ -190,7 +191,13 @@ class _MeasureScreenState extends State<MeasureScreen> {
         result: result,
       );
     });
+    // 2. ...wait until the screen has redrawn without it...
+    await WidgetsBinding.instance.endOfFrame;
+    // 3. ...and only then shut the camera down.
+    FirebaseCrashlytics.instance.log('Measurement finished, stopping camera');
+    await _stopCamera();
   }
+  
 
   Future<void> _openSettings() async {
     await Navigator.of(context).push(
