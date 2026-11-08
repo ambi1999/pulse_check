@@ -1,42 +1,84 @@
-# Runs when code lands on main: build the APK and send it to testers.
+# =============================================================================
+# CD (Continuous Delivery): send every approved change to testers' phones
+#
+# What this file is:
+#   A recipe GitHub follows automatically whenever new code lands on main
+#   (which, thanks to the "protect-main" ruleset, only happens by merging a
+#   pull request that already passed CI). It checks the code once more,
+#   builds the official app, signs it with our private key and sends it to
+#   our testers through Firebase App Distribution. Nobody builds, signs or
+#   uploads anything by hand.
+#
+# Secrets used (GitHub: Settings > Secrets and variables > Actions):
+#   Passwords and keys are never written in this file or anywhere in the
+#   code. They are stored encrypted by GitHub and handed to this run only
+#   while it needs them. Nobody can read them back, not even the owner.
+# =============================================================================
+
+# The name shown on the Actions tab.
 name: Deploy to Firebase
 
+# WHEN to run: every time something new arrives on the main branch,
+# i.e. every time a pull request is merged.
 on:
   push:
     branches: [main]
 
+# If two merges happen close together, cancel the older, still-running
+# deploy and only deliver the newest version. The newest version already
+# contains the older change, so building both would be wasted work.
 concurrency:
   group: deploy-main
   cancel-in-progress: true
 
 jobs:
   build-and-distribute:
+    # WHERE to run: a fresh Linux computer from GitHub, wiped after the run
+    # (so the signing key never stays on it).
     runs-on: ubuntu-latest
+
+    # WHAT to do, in order. If any step fails, the later steps are skipped
+    # and nothing is sent to testers.
     steps:
+      # 1. Download the latest code from main onto the fresh computer.
       - name: Check out code
         uses: actions/checkout@v7
 
+      # 2. Install Java, which Android's build tools need.
       - name: Set up Java
         uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: '17'
 
+      # 3. Install Flutter, the toolkit the app is written with.
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: stable
           cache: true
 
+      # 4. Download the packages the app relies on, at the exact versions
+      #    recorded in pubspec.lock.
       - name: Install dependencies
         run: flutter pub get
 
+      # 5. Check the code again, as a final safety check on the exact
+      #    combination of changes now on main.
       - name: Static analysis
         run: flutter analyze
 
+      # 6. Run all the automatic tests again, for the same reason.
       - name: Unit tests
         run: flutter test
 
+      # 7. Prepare the signing key. Android only installs updates that carry
+      #    the same digital signature as the app already on the phone, a bit
+      #    like a wax seal proving who sent it. Our key is stored in GitHub
+      #    Secrets as text; this step turns it back into a key file and
+      #    writes a small settings file (key.properties) telling the build
+      #    where the key is and what its passwords are. Both files exist only
+      #    on this temporary computer and disappear when the run ends.
       - name: Set up signing key
         env:
           KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
@@ -51,10 +93,21 @@ jobs:
           keyAlias=$KEY_ALIAS
           storeFile=upload-keystore.jks
           EOF
-          
+
+      # 8. Build the official, signed app (the APK file).
+      #    "--release" = the optimised version real users get.
+      #    "--build-number" = this run's number, so every build has a higher
+      #    number than the last one and phones accept it as an update.
       - name: Build APK
         run: flutter build apk --release --build-number=${{ github.run_number }}
 
+      # 9. Send the app to Firebase App Distribution, which notifies everyone
+      #    in the "testers" group. They install it with the App Tester app.
+      #    - appId: which Firebase app to upload to.
+      #    - serviceCredentialsFileContent: a "robot login" that is only
+      #      allowed to upload test builds (it can't change anything else).
+      #    - releaseNotes: shown to testers; built from the run number and
+      #      the merge's commit message, so they know what changed.
       - name: Upload to Firebase App Distribution
         uses: wzieba/Firebase-Distribution-Github-Action@v1
         with:
