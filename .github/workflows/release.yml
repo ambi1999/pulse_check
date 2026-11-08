@@ -101,7 +101,7 @@ jobs:
       #    the notes automatically from the pull requests merged since the
       #    previous version.
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: pulse-check-${{ github.ref_name }}.apk
           generate_release_notes: true
