@@ -46,6 +46,11 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
+          # Keep Gradle (Android's build tool) and the libraries it downloads
+          # between runs, so later runs reuse them instead of downloading
+          # everything again. Faster, and fewer network failures.
+          cache: gradle
+
 
       # 3. Install Flutter, the toolkit the app is written with.
       - name: Set up Flutter
