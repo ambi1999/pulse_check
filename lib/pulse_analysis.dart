@@ -87,7 +87,10 @@ PulseResult calculateBpm(List<double> timestampsMs, List<double> values) {
     return const PulseResult.noPulse();
   }
 
-  final bpm = 60000 / medianInterval;
+  //final bpm = 60000 / medianInterval;
+  //Intoducing a but to test to show the demo of the CI pipeline, that it will catch errors. The correct formula is commented above.
+  final bpm = 120000 / medianInterval;
+  
   if (bpm < minBpm || bpm > maxBpm) {
     return const PulseResult.noPulse();
   }
