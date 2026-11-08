@@ -1,41 +1,103 @@
-# Runs on every pull request to main: the "CI" quality gate.
+# =============================================================================
+# CI (Continuous Integration): the quality gate for every proposed change
+#
+# What this file is:
+#   A recipe that GitHub follows automatically. Every time someone opens or
+#   updates a pull request into main, GitHub borrows a brand-new computer,
+#   downloads our code and runs the checks below, in order. If any step
+#   fails, the whole run turns red and the change cannot be merged.
+#
+# How it connects to the "protect-main" ruleset
+#   (GitHub: Settings > Rules > Rulesets > protect-main)
+#
+#   - Enforcement status: Active
+#       The rule is switched on. ("Evaluate" would only report, not block.)
+#   - Target branches: Default branch (main)
+#       The rule protects main, the branch the real app is built from.
+#   - Require a pull request before merging
+#       Nobody can push straight to main. Every change must arrive as a
+#       pull request, which is what starts this file.
+#   - Require status checks to pass: analyze-and-test
+#       The job below is called "analyze-and-test". The ruleset names that
+#       job, so the Merge button stays locked until this job is green.
+#   - Bypass list: empty
+#       Nobody is exempt, not even the repository owner or admins. The same
+#       rules apply to everyone, every time.
+# =============================================================================
+
+# The name shown on the Actions tab and on pull requests ("CI / analyze-and-test").
 name: CI
 
+# WHEN to run: whenever a pull request wants to change the main branch
+# (when it is opened, and again every time new code is pushed to it).
 on:
   pull_request:
     branches: [main]
 
 jobs:
+  # The job name. This exact name is the "status check" the ruleset requires.
   analyze-and-test:
+    # WHERE to run: a fresh Linux computer from GitHub, wiped after every run,
+    # so results never depend on what happens to be installed on someone's laptop.
     runs-on: ubuntu-latest
+
+    # WHAT to do, in order. If any step fails, the later steps are skipped
+    # and the check turns red.
     steps:
+      # 1. Download our code from GitHub onto the fresh computer.
+      #    "uses:" means "run a ready-made tool" (here, GitHub's own checkout tool).
+      #    "@v7" is the tool's version; Dependabot keeps it up to date for us.
       - name: Check out code
         uses: actions/checkout@v7
 
+      # 2. Install Java. Android's build tools are written in Java, so the
+      #    app cannot be built without it. "temurin" is a free, widely used
+      #    edition of Java; version 17 is what current Android tools expect.
       - name: Set up Java
         uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: '17'
 
+      # 3. Install Flutter, the toolkit the app is written with.
+      #    "stable" = the tested, recommended release of Flutter.
+      #    "cache" keeps a copy of the download from earlier runs, so this
+      #    step is faster next time.
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: stable
           cache: true
 
+      # 4. Download the packages the app relies on (camera, email, Firebase
+      #    and others) at the exact versions recorded in pubspec.lock, so
+      #    every run uses the same versions as the developer's laptop.
+      #    "run:" means "type this command", just like in a terminal.
       - name: Install dependencies
         run: flutter pub get
 
+      # 5. Static analysis: reads the code WITHOUT running it, like a
+      #    spell-checker and grammar-checker for code. It catches mistakes
+      #    and bad practice. Any problem it reports fails the run.
       - name: Static analysis
         run: flutter analyze
 
+      # 6. Unit tests: runs every test in the test folder. Each test feeds
+      #    the code an input whose correct answer we already know (for
+      #    example, a fake pulse that must read 72 beats per minute) and
+      #    fails if the code gives a different answer.
       - name: Unit tests
         run: flutter test
 
+      # 7. Build the installable Android app (the APK file). This proves the
+      #    change still turns into a working app, not just that the tests
+      #    pass. "--debug" makes a quick test build, not the official release.
       - name: Build APK
         run: flutter build apk --debug
 
+      # 8. Attach the app file to this run's Summary page, so a reviewer can
+      #    download it and try this exact change on a phone before merging.
+      #    It is deleted automatically after 7 days to save storage.
       - name: Upload APK
         uses: actions/upload-artifact@v7
         with:

@@ -1,19 +1,46 @@
+# =============================================================================
+# Dependabot: keeps the app's building blocks up to date automatically
+#
+# What this file is:
+#   Instructions for Dependabot, a GitHub robot. Once a week it checks
+#   whether newer versions exist of the packages our app uses and of the
+#   ready-made tools our pipelines use. When it finds one, it opens a pull
+#   request with the update. That pull request then goes through CI like any
+#   other change, so an update is only merged if the app still passes every
+#   check. Separately, GitHub warns us if any of them has a known security
+#   problem.
+#
+# Version numbers follow "major.minor.patch" (e.g. 2.4.1):
+#   patch = bug fixes, minor = new features (both should be safe),
+#   major = bigger changes that may need our code to change.
+# =============================================================================
+
+# The format version of this file (always 2).
 version: 2
+
 updates:
-  # Flutter/Dart packages in pubspec.yaml
+  # 1. The app's own packages (camera, email, Firebase and so on),
+  #    listed in pubspec.yaml. "pub" is Flutter/Dart's package system.
   - package-ecosystem: "pub"
+    # Where pubspec.yaml lives: the top folder of the project.
     directory: "/"
+    # How often to check for updates.
     schedule:
       interval: "weekly"
+    # Bundle all the small, low-risk updates (minor and patch) into ONE pull
+    # request instead of one each. Major updates still get their own pull
+    # request, so a risky update can be reviewed on its own.
     groups:
       flutter-minor-and-patch:
         update-types: ["minor", "patch"]
 
-  # Actions used in .github/workflows/*.yml
+  # 2. The ready-made tools our pipelines use (the "uses:" lines in
+  #    .github/workflows/*.yml, e.g. actions/checkout@v7).
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "weekly"
+    # Bundle every tool update into a single pull request.
     groups:
       github-actions:
         patterns: ["*"]

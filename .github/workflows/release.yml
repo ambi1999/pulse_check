@@ -1,41 +1,75 @@
-# Runs when you push a version tag like v1.0.0: create a GitHub Release.
+# =============================================================================
+# Release: publish an official, numbered version of the app
+#
+# What this file is:
+#   A recipe GitHub follows when we deliberately mark a version, by pushing
+#   a "tag" such as v1.4.0. It builds the signed app with that version
+#   number and publishes it on the repository's Releases page, with release
+#   notes listing every change since the previous version.
+#
+# Why this is separate from deploy.yml:
+#   Every merge goes to testers automatically, but publishing an official
+#   version is a decision a person makes. Pushing the tag is that decision:
+#     git tag v1.4.0
+#     git push origin v1.4.0
+# =============================================================================
+
+# The name shown on the Actions tab.
 name: Release
 
+# WHEN to run: only when a version tag is pushed. The pattern 'v*.*.*'
+# means "v, then three numbers separated by dots", e.g. v1.4.0.
+# (major.minor.patch: big changes, new features, bug fixes.)
 on:
   push:
     tags: ['v*.*.*']
 
+# PERMISSIONS: by default a run can only read the repository. Creating a
+# release means writing to it, so this run is allowed to do just that.
 permissions:
-  contents: write  # needed to create the release
+  contents: write
 
 jobs:
   build-and-release:
+    # WHERE to run: a fresh Linux computer from GitHub, wiped after the run.
     runs-on: ubuntu-latest
+
+    # WHAT to do, in order. If any step fails, nothing is published.
     steps:
+      # 1. Download the code exactly as it was at the tagged version.
       - name: Check out code
         uses: actions/checkout@v7
 
+      # 2. Install Java, which Android's build tools need.
       - name: Set up Java
         uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: '17'
 
+      # 3. Install Flutter, the toolkit the app is written with.
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: stable
           cache: true
 
+      # 4. Download the packages the app relies on, at the exact versions
+      #    recorded in pubspec.lock.
       - name: Install dependencies
         run: flutter pub get
 
+      # 5. Check the code once more before publishing anything.
       - name: Static analysis
         run: flutter analyze
 
+      # 6. Run all the automatic tests once more before publishing.
       - name: Unit tests
         run: flutter test
-        
+
+      # 7. Prepare the signing key from GitHub Secrets (same as deploy.yml),
+      #    so this release carries the same signature as every other build
+      #    and installs as an update over earlier versions.
       - name: Set up signing key
         env:
           KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
@@ -50,13 +84,22 @@ jobs:
           keyAlias=$KEY_ALIAS
           storeFile=upload-keystore.jks
           EOF
-          
+
+      # 8. Build the signed app, using the tag as its version.
+      #    Line 1: take the tag name (e.g. "v1.4.0") and drop the "v" -> "1.4.0".
+      #    Line 2: build the official app with that version number, which
+      #            users see in the app and in Android's settings.
+      #    Line 3: copy the app file to a clear name, e.g. pulse-check-v1.4.0.apk.
       - name: Build APK (version taken from the tag)
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
           flutter build apk --release --build-name="$VERSION" --build-number=${{ github.run_number }}
           cp build/app/outputs/flutter-apk/app-release.apk "pulse-check-${GITHUB_REF_NAME}.apk"
 
+      # 9. Publish the release on GitHub's Releases page, with the app file
+      #    attached for download. "generate_release_notes" makes GitHub write
+      #    the notes automatically from the pull requests merged since the
+      #    previous version.
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
